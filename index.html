@@ -6,32 +6,80 @@
 <style>
     body { font-family: Arial, sans-serif; margin: 20px; background-color: #f8f8f8; }
     h1 { text-align: center; }
+    #progressContainer {
+        width: 100%;
+        background-color: #ddd;
+        border-radius: 20px;
+        margin: 10px 0 20px;
+        height: 25px;
+        overflow: hidden;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+    }
+    #progressBar {
+        height: 100%;
+        width: 0%;
+        background-color: #4caf50;
+        border-radius: 20px 0 0 20px;
+        text-align: center;
+        line-height: 25px;
+        color: white;
+        font-weight: bold;
+        transition: width 0.3s ease;
+        user-select: none;
+    }
     table { width: 100%; border-collapse: collapse; background: white; }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: center; vertical-align: top; }
     th { background-color: #eee; }
     textarea { width: 95%; height: 50px; resize: vertical; }
     .remark { background-color: #ffffcc; }
-    .status-box { width: 30px; height: 30px; cursor: pointer; display: inline-block; border: 1px solid #888; }
+    .status-box {
+        width: 30px; height: 30px; cursor: pointer;
+        display: inline-block; border: 1px solid #888;
+        position: relative;
+    }
     #character { display: block; margin: 20px auto; max-width: 150px; }
     .controls { text-align: center; margin: 15px 0; }
     .controls button, .controls label {
-        margin: 5px; padding: 8px 15px; background: #4caf50; color: white;
-        border: none; border-radius: 4px; cursor: pointer;
+        margin: 5px; padding: 8px 15px; background: #4caf50;
+        color: white; border: none; border-radius: 4px; cursor: pointer;
     }
     .controls button:hover, .controls label:hover { background: #45a049; }
     label[for="importFile"] { background: #2196f3; }
-    input[type="file"], #hiddenColorPicker { display: none; }
+    input[type="file"] { display: none; }
+    .palette {
+        display: none;
+        position: absolute;
+        top: 35px;
+        left: 0;
+        background: white;
+        border: 1px solid #ccc;
+        padding: 5px;
+        border-radius: 4px;
+        z-index: 10;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .color-option {
+        width: 20px; height: 20px;
+        display: inline-block; cursor: pointer;
+        border: 1px solid #333; margin: 2px; border-radius: 3px;
+    }
 </style>
 </head>
 <body>
 
 <h1>Daily Task Tracker</h1>
+
+<!-- Progress bar container -->
+<div id="progressContainer" aria-label="Progress bar">
+    <div id="progressBar">0%</div>
+</div>
+
 <img id="character" src="stage1.png" alt="Progress Character">
 
 <div class="controls">
     <button id="exportBtn">⬇ Export Data</button>
     <label for="importFile">⬆ Import Data</label>
-    <input type="file" id="importFile" accept=".json">
+    <input type="file" id="importFile" accept=".json" />
 </div>
 
 <table id="taskTable">
@@ -46,40 +94,28 @@
     <tbody></tbody>
 </table>
 
-<!-- Persistent hidden color picker -->
-<input type="color" id="hiddenColorPicker">
-
 <script>
 const startDate = new Date(2025, 7, 13);
 const endDate = new Date(2026, 1, 1);
 let savedData = JSON.parse(localStorage.getItem('tasks') || '{}');
 const tbody = document.querySelector("#taskTable tbody");
-let colorPicker = document.getElementById("hiddenColorPicker");
+const progressBar = document.getElementById("progressBar");
+const COLORS = ["green", "red"]; // only green and red allowed
 let dayCount = 0;
 
-// Functions
 function saveData() {
     localStorage.setItem('tasks', JSON.stringify(savedData));
     updateCharacter();
-}
-function rgbToHex(rgb) {
-    if (!rgb) return "#ffffff";
-    if (rgb.startsWith("#")) return rgb;
-    const result = rgb.match(/\d+/g).map(Number);
-    return "#" + result.map(x => x.toString(16).padStart(2, "0")).join("");
+    updateProgressBar();
 }
 
-// Build table
 for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     dayCount++;
 
-    // Remark row for Sundays
     if (d.getDay() === 0) {
         let row = tbody.insertRow();
         row.classList.add("remark");
-        // First cell label
         row.insertCell().textContent = "Remark:";
-        // Textarea spans all remaining columns
         let remarkCell = row.insertCell();
         remarkCell.colSpan = 3;
         let remarkBox = document.createElement("textarea");
@@ -91,7 +127,6 @@ for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         remarkCell.appendChild(remarkBox);
     }
 
-    // Regular day row
     let tr = tbody.insertRow();
     tr.insertCell().textContent = d.toLocaleDateString();
 
@@ -107,24 +142,36 @@ for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
 
     let statusBox = document.createElement("div");
     statusBox.className = "status-box";
-    statusBox.style.backgroundColor = savedData[`status-${dayCount}`] || "white";
+    statusBox.style.backgroundColor = savedData[`status-${dayCount}`] || "red";
 
-    statusBox.onclick = () => {
-        // Preload current color to picker
-        colorPicker.value = rgbToHex(statusBox.style.backgroundColor || "#ffffff");
-        // On change update status + save
-        colorPicker.oninput = (e) => {
-            const newColor = e.target.value;
-            statusBox.style.backgroundColor = newColor;
-            savedData[`status-${dayCount}`] = newColor;
+    let palette = document.createElement("div");
+    palette.className = "palette";
+    COLORS.forEach(color => {
+        let opt = document.createElement("div");
+        opt.className = "color-option";
+        opt.style.backgroundColor = color;
+        opt.title = color;
+        opt.onclick = e => {
+            e.stopPropagation();
+            statusBox.style.backgroundColor = color;
+            savedData[`status-${dayCount}`] = color;
             saveData();
+            palette.style.display = "none";
         };
-        colorPicker.click();
+        palette.appendChild(opt);
+    });
+
+    statusBox.onclick = e => {
+        e.stopPropagation();
+        document.querySelectorAll(".palette").forEach(p => { if (p !== palette) p.style.display = "none"; });
+        palette.style.display = (palette.style.display === "block") ? "none" : "block";
     };
+    document.body.addEventListener("click", () => { palette.style.display = "none"; });
+
+    statusBox.appendChild(palette);
     tr.insertCell().appendChild(statusBox);
 }
 
-// Export
 document.getElementById("exportBtn").onclick = () => {
     const blob = new Blob([JSON.stringify(savedData)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -135,7 +182,6 @@ document.getElementById("exportBtn").onclick = () => {
     URL.revokeObjectURL(url);
 };
 
-// Import
 document.getElementById("importFile").onchange = function(evt) {
     const file = evt.target.files[0];
     if (!file) return;
@@ -146,34 +192,49 @@ document.getElementById("importFile").onchange = function(evt) {
             localStorage.setItem('tasks', JSON.stringify(savedData));
             alert("✅ Data Imported! Reloading...");
             location.reload();
-        } catch (err) {
+        } catch {
             alert("❌ Invalid JSON file");
         }
     };
     reader.readAsText(file);
 };
 
-// Update character image
 function updateCharacter() {
-    let totalDays = 0, greenDays = 0;
-    for (let key in savedData) {
-        if (key.startsWith("status-")) {
-            totalDays++;
-            let val = savedData[key].toLowerCase();
-            if (val === "green" || val === "#008000" || val === "#00ff00") {
-                greenDays++;
-            }
+    let totalDays = dayCount;
+    let greenDays = 0;
+    for (let i = 1; i <= dayCount; i++) {
+        let val = savedData[`status-${i}`]?.toLowerCase();
+        if (val === "green" || val === "#008000" || val === "#00ff00") {
+            greenDays++;
         }
     }
     const ratio = totalDays > 0 ? greenDays / totalDays : 0;
-    const charImg = document.getElementById("character");
-    if (ratio === 1) charImg.src = "stage5.png";
-    else if (ratio > 0.75) charImg.src = "stage4.png";
-    else if (ratio > 0.5) charImg.src = "stage3.png";
-    else if (ratio > 0.25) charImg.src = "stage2.png";
-    else charImg.src = "stage1.png";
+    const img = document.getElementById("character");
+    if (ratio === 1 && totalDays > 0) img.src = "stage5.png";
+    else if (ratio > 0.75) img.src = "stage4.png";
+    else if (ratio > 0.5) img.src = "stage3.png";
+    else if (ratio > 0.25) img.src = "stage2.png";
+    else img.src = "stage1.png";
 }
+
+function updateProgressBar() {
+    let totalDays = dayCount;
+    let greenDays = 0;
+    for (let i = 1; i <= dayCount; i++) {
+        let val = savedData[`status-${i}`]?.toLowerCase();
+        if (val === "green" || val === "#008000" || val === "#00ff00") {
+            greenDays++;
+        }
+    }
+    const percent = totalDays > 0 ? Math.round((greenDays / totalDays) * 100) : 0;
+    progressBar.style.width = percent + '%';
+    progressBar.textContent = percent + '%';
+}
+
+// Initialize
 updateCharacter();
+updateProgressBar();
+
 </script>
 
 </body>
