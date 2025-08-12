@@ -4,54 +4,35 @@
 <meta charset="UTF-8">
 <title>Daily Task Tracker</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 20px;
-        background-color: #f8f8f8;
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f8f8f8; }
+    h1 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; vertical-align: top; }
+    th { background-color: #eee; }
+    textarea { width: 95%; height: 50px; resize: vertical; }
+    .remark { background-color: #ffffcc; }
+    .status-box { width: 30px; height: 30px; cursor: pointer; display: inline-block; border: 1px solid #888; }
+    #character { display: block; margin: 20px auto; max-width: 150px; }
+    .controls { text-align: center; margin: 15px 0; }
+    .controls button, .controls label {
+        margin: 5px; padding: 8px 15px; background: #4caf50; color: white;
+        border: none; border-radius: 4px; cursor: pointer;
     }
-    h1 {
-        text-align: center;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        background: white;
-    }
-    th, td {
-        border: 1px solid #ccc;
-        padding: 8px;
-        text-align: center;
-        vertical-align: top;
-    }
-    th {
-        background-color: #eee;
-    }
-    textarea {
-        width: 95%;
-        height: 50px;
-        resize: vertical;
-    }
-    .remark {
-        background-color: #ffffcc;
-    }
-    .status-box {
-        width: 30px;
-        height: 30px;
-        cursor: pointer;
-        display: inline-block;
-        border: 1px solid #888;
-    }
-    #character {
-        display: block;
-        margin: 20px auto;
-        max-width: 150px;
-    }
+    .controls button:hover, .controls label:hover { background: #45a049; }
+    label[for="importFile"] { background: #2196f3; }
+    input[type="file"], #hiddenColorPicker { display: none; }
 </style>
 </head>
 <body>
 
 <h1>Daily Task Tracker</h1>
 <img id="character" src="stage1.png" alt="Progress Character">
+
+<div class="controls">
+    <button id="exportBtn">⬇ Export Data</button>
+    <label for="importFile">⬆ Import Data</label>
+    <input type="file" id="importFile" accept=".json">
+</div>
 
 <table id="taskTable">
     <thead>
@@ -62,98 +43,136 @@
             <th>Status</th>
         </tr>
     </thead>
-    <tbody>
-    </tbody>
+    <tbody></tbody>
 </table>
 
-<script>
-// Configuration
-const startDate = new Date(2025, 7, 13); // Aug 13, 2025 (month index is 0-based)
-const endDate = new Date(2026, 1, 1); // Feb 1, 2026
-const savedData = JSON.parse(localStorage.getItem('tasks') || '{}');
+<!-- Persistent hidden color picker -->
+<input type="color" id="hiddenColorPicker">
 
-// Generate table rows
-let tbody = document.querySelector("#taskTable tbody");
+<script>
+const startDate = new Date(2025, 7, 13);
+const endDate = new Date(2026, 1, 1);
+let savedData = JSON.parse(localStorage.getItem('tasks') || '{}');
+const tbody = document.querySelector("#taskTable tbody");
+let colorPicker = document.getElementById("hiddenColorPicker");
 let dayCount = 0;
-for(let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+
+// Functions
+function saveData() {
+    localStorage.setItem('tasks', JSON.stringify(savedData));
+    updateCharacter();
+}
+function rgbToHex(rgb) {
+    if (!rgb) return "#ffffff";
+    if (rgb.startsWith("#")) return rgb;
+    const result = rgb.match(/\d+/g).map(Number);
+    return "#" + result.map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+// Build table
+for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     dayCount++;
+
     // Remark row for Sundays
-    if(d.getDay() === 0){
+    if (d.getDay() === 0) {
         let row = tbody.insertRow();
         row.classList.add("remark");
+        // First cell label
         row.insertCell().textContent = "Remark:";
+        // Textarea spans all remaining columns
+        let remarkCell = row.insertCell();
+        remarkCell.colSpan = 3;
         let remarkBox = document.createElement("textarea");
         remarkBox.value = savedData[`remark-${dayCount}`] || "";
         remarkBox.oninput = () => {
             savedData[`remark-${dayCount}`] = remarkBox.value;
-            localStorage.setItem('tasks', JSON.stringify(savedData));
+            saveData();
         };
-        row.insertCell().appendChild(remarkBox);
-        row.insertCell();
-        row.insertCell();
+        remarkCell.appendChild(remarkBox);
     }
-    // Task row
+
+    // Regular day row
     let tr = tbody.insertRow();
     tr.insertCell().textContent = d.toLocaleDateString();
-    
+
     let task = document.createElement("textarea");
     task.value = savedData[`task-${dayCount}`] || "";
-    task.oninput = () => {
-        savedData[`task-${dayCount}`] = task.value;
-        localStorage.setItem('tasks', JSON.stringify(savedData));
-    };
+    task.oninput = () => { savedData[`task-${dayCount}`] = task.value; saveData(); };
     tr.insertCell().appendChild(task);
 
     let prog = document.createElement("textarea");
     prog.value = savedData[`prog-${dayCount}`] || "";
-    prog.oninput = () => {
-        savedData[`prog-${dayCount}`] = prog.value;
-        localStorage.setItem('tasks', JSON.stringify(savedData));
-    };
+    prog.oninput = () => { savedData[`prog-${dayCount}`] = prog.value; saveData(); };
     tr.insertCell().appendChild(prog);
 
     let statusBox = document.createElement("div");
     statusBox.className = "status-box";
     statusBox.style.backgroundColor = savedData[`status-${dayCount}`] || "white";
+
     statusBox.onclick = () => {
-        let color = prompt("Enter status color (green, red, yellow, etc.)", statusBox.style.backgroundColor);
-        if(color) {
-            statusBox.style.backgroundColor = color.toLowerCase();
-            savedData[`status-${dayCount}`] = color.toLowerCase();
-            localStorage.setItem('tasks', JSON.stringify(savedData));
-            updateCharacter();
-        }
+        // Preload current color to picker
+        colorPicker.value = rgbToHex(statusBox.style.backgroundColor || "#ffffff");
+        // On change update status + save
+        colorPicker.oninput = (e) => {
+            const newColor = e.target.value;
+            statusBox.style.backgroundColor = newColor;
+            savedData[`status-${dayCount}`] = newColor;
+            saveData();
+        };
+        colorPicker.click();
     };
     tr.insertCell().appendChild(statusBox);
 }
 
-// Update character based on success ratio
-function updateCharacter(){
+// Export
+document.getElementById("exportBtn").onclick = () => {
+    const blob = new Blob([JSON.stringify(savedData)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "task_backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+// Import
+document.getElementById("importFile").onchange = function(evt) {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            savedData = JSON.parse(e.target.result);
+            localStorage.setItem('tasks', JSON.stringify(savedData));
+            alert("✅ Data Imported! Reloading...");
+            location.reload();
+        } catch (err) {
+            alert("❌ Invalid JSON file");
+        }
+    };
+    reader.readAsText(file);
+};
+
+// Update character image
+function updateCharacter() {
     let totalDays = 0, greenDays = 0;
-    for(let key in savedData){
-        if(key.startsWith("status-")){
+    for (let key in savedData) {
+        if (key.startsWith("status-")) {
             totalDays++;
-            if(savedData[key].toLowerCase() === "green"){
+            let val = savedData[key].toLowerCase();
+            if (val === "green" || val === "#008000" || val === "#00ff00") {
                 greenDays++;
             }
         }
     }
-    let ratio = totalDays > 0 ? greenDays / totalDays : 0;
-    let charImg = document.getElementById("character");
-    if(ratio === 1){
-        charImg.src = "stage5.png";
-    } else if(ratio > 0.75){
-        charImg.src = "stage4.png";
-    } else if(ratio > 0.5){
-        charImg.src = "stage3.png";
-    } else if(ratio > 0.25){
-        charImg.src = "stage2.png";
-    } else {
-        charImg.src = "stage1.png";
-    }
+    const ratio = totalDays > 0 ? greenDays / totalDays : 0;
+    const charImg = document.getElementById("character");
+    if (ratio === 1) charImg.src = "stage5.png";
+    else if (ratio > 0.75) charImg.src = "stage4.png";
+    else if (ratio > 0.5) charImg.src = "stage3.png";
+    else if (ratio > 0.25) charImg.src = "stage2.png";
+    else charImg.src = "stage1.png";
 }
-
-// Initialize
 updateCharacter();
 </script>
 
